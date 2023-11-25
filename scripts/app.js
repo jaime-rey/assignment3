@@ -1,67 +1,79 @@
-(() => {
+(function () {
   "use strict";
 
   angular
     .module("NarrowItDownApp", [])
     .controller("NarrowItDownController", NarrowItDownController)
-    .service("MenuSearchService", MenuSearchService);
+    .service("MenuSearchService", MenuSearchService)
+    .constant("ApiBasePath", "https://coursera-jhu-default-rtdb.firebaseio.com")
+    .directive("foundItems", FoundItems);
+
+  function FoundItems() {
+    let ddo = {
+      restrict: "E",
+      templateUrl: "foundItems.html",
+      scope: {
+        foundItems: "<",
+        onEmpty: "<",
+        onRemove: "&",
+      },
+      controller: NarrowItDownController,
+      controllerAs: "menu",
+      bindToController: true,
+    };
+
+    return ddo;
+  }
 
   NarrowItDownController.$inject = ["MenuSearchService"];
+
   function NarrowItDownController(MenuSearchService) {
     let menu = this;
-    menu.narrowTerm = "chicken";
+    menu.shortName = "";
 
-    let promise = MenuSearchService.narrowItDown();
+    menu.matchedMenuItems = (searchTerm) => {
+      let promise = MenuSearchService.getMatchedMenuItems(searchTerm);
 
-    promise
-      .then(function (response) {
-        menu.categories = response.data;
-        console.log(menu.categories);
-      })
-      .catch(function (error) {
-        console.log("error");
-        console.log(error);
+      promise.then((items) => {
+        if (items && items.length > 0) {
+          menu.message = "";
+          menu.found = items;
+        } else {
+          menu.message = "Nothing found!";
+          menu.found = [];
+        }
       });
+    };
 
-    menu.logMenuItems = (shortName) => {
-      let promise = MenuSearchService.getMenuForCategory(shortName);
-
-      promise
-        .then(function (response) {
-          console.log("*********" + response.data.toString());
-        })
-        .catch(function (error) {
-          console.log("error");
-          console.log(error);
-        });
+    menu.removeMenuItem = (itemIndex) => {
+      menu.found.splice(itemIndex, 1);
     };
   }
 
-  MenuSearchService.$inject = ["$http"];
-  function MenuSearchService($http) {
-    let search = this;
+  MenuSearchService.$inject = ["$http", "ApiBasePath"];
 
-    search.narrowItDown = () => {
-      console.log("narrowItDown called: ");
+  function MenuSearchService($http, ApiBasePath) {
+    let service = this;
 
+    service.getMatchedMenuItems = (searchTerm) => {
       let response = $http({
         method: "GET",
-        url: "https://coursera-jhu-default-rtdb.firebaseio.com/categories.json",
+        url: ApiBasePath + "/menu_items.json",
       });
 
-      return response;
-    };
+      return response.then((result) => {
+        let searchItems = [];
+        let data = result.data;
 
-    search.getMenuForCategory = (shortName) => {
-      console.log("getMenuForCategory called: " + shortName);
-      let response = $http({
-        method: "GET",
-        url: "https://coursera-jhu-default-rtdb.firebaseio.com/menu_items.json",
-        params: {
-          category: shortName,
-        },
+        for (let category in data) {
+          searchItems.push(
+            data[category].menu_items.filter((item) =>
+              item.description.toLowerCase().includes(searchTerm.toLowerCase())
+            )
+          );
+        }
+        return searchItems.flat();
       });
-      return response;
     };
   }
 })();
